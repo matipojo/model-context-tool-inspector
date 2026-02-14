@@ -54,8 +54,15 @@
       </div>
 
       <div class="form-group">
-        <label for="inputArgsText">Input Arguments</label>
-        <textarea id="inputArgsText">{"text": "hello world"}</textarea>
+        <div class="input-args-header">
+          <label for="inputArgsText">Input Arguments</label>
+          <div class="mode-switcher" id="modeSwitcher">
+            <button type="button" class="mode-btn active" data-mode="form">Form</button>
+            <button type="button" class="mode-btn" data-mode="json">JSON</button>
+          </div>
+        </div>
+        <div id="formFields"></div>
+        <textarea id="inputArgsText" hidden>{"text": "hello world"}</textarea>
       </div>
 
       <div class="form-group">
@@ -65,6 +72,17 @@
       <pre id="toolResults"></pre>
       </div>
     </div>
+
+    <div id="executeModalOverlay" class="execute-modal-overlay" aria-hidden="true">
+      <div class="execute-modal-box" role="dialog" aria-modal="true" aria-labelledby="executeModalTitle">
+        <div class="execute-modal-header">
+          <h3 id="executeModalTitle" class="execute-modal-title"></h3>
+          <button type="button" id="executeModalClose" class="execute-modal-close" aria-label="Close" title="Close">×</button>
+        </div>
+        <div id="executeModalContent" class="execute-modal-content"></div>
+      </div>
+    </div>
+
     <script type="module" src="sidebar.js"></script>
   </body>
 </html>

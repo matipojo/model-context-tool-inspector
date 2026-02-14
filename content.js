@@ -54,9 +54,64 @@ chrome.runtime.onMessage.addListener(({ action, name, inputArgs }, _, reply) => 
 });
 
 function listTools() {
-  const tools = navigator.modelContextTesting.listTools();
-  console.debug(`[WebMCP] Got ${tools.length} tools`, tools);
-  chrome.runtime.sendMessage({ tools, url: location.href });
+  const rawTools = navigator.modelContextTesting.listTools();
+  console.debug(`[WebMCP] Got ${rawTools.length} tools`, rawTools);
+
+  function sendTools(schemaMap) {
+    const tools = rawTools.map(t => ({
+      name: t.name,
+      description: t.description,
+      inputSchema: t.inputSchema || schemaMap[t.name] || '',
+    }));
+    chrome.runtime.sendMessage({ tools, url: location.href });
+  }
+
+  // Read schemas from page's main world (e.g. window.__MCP_TOOL_SCHEMAS__).
+  // Retry a few times so we pick up schemas set after MCP clients connect.
+  getPageSchemas().then((schemaMap) => {
+    const hasSchemas = Object.keys(schemaMap || {}).length > 0;
+    if (hasSchemas || rawTools.length === 0) {
+      sendTools(schemaMap || {});
+      return;
+    }
+    setTimeout(() => {
+      getPageSchemas().then((retryMap) => {
+        const hasRetry = Object.keys(retryMap || {}).length > 0;
+        if (hasRetry) {
+          sendTools(retryMap);
+          return;
+        }
+        setTimeout(() => {
+          getPageSchemas().then((finalMap) => sendTools(finalMap || {}));
+        }, 400);
+      });
+    }, 400);
+  });
+}
+
+function getPageSchemas() {
+  return new Promise(resolve => {
+    const id = '__webmcp_schema_req_' + Date.now();
+    const handler = (event) => {
+      if (event.data?.type === id) {
+        window.removeEventListener('message', handler);
+        resolve(event.data.schemas || {});
+      }
+    };
+    window.addEventListener('message', handler);
+
+    // Inject a script into the main world to read the schemas
+    const script = document.createElement('script');
+    script.textContent = `window.postMessage({type:'${id}',schemas:window.__MCP_TOOL_SCHEMAS__||{}})`;
+    document.documentElement.appendChild(script);
+    script.remove();
+
+    // Timeout fallback - don't block forever
+    setTimeout(() => {
+      window.removeEventListener('message', handler);
+      resolve({});
+    }, 200);
+  });
 }
 
 window.addEventListener('toolactivated', ({ toolName }) => {

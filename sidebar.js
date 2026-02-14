@@ -13,6 +13,8 @@ const copyAsScriptToolConfig = document.getElementById('copyAsScriptToolConfig')
 const copyAsJSON = document.getElementById('copyAsJSON');
 const toolNames = document.getElementById('toolNames');
 const inputArgsText = document.getElementById('inputArgsText');
+const formFields = document.getElementById('formFields');
+const modeSwitcher = document.getElementById('modeSwitcher');
 const executeBtn = document.getElementById('executeBtn');
 const toolResults = document.getElementById('toolResults');
 const userPromptText = document.getElementById('userPromptText');
@@ -21,6 +23,265 @@ const traceBtn = document.getElementById('traceBtn');
 const resetBtn = document.getElementById('resetBtn');
 const apiKeyBtn = document.getElementById('apiKeyBtn');
 const promptResults = document.getElementById('promptResults');
+const executeModalOverlay = document.getElementById('executeModalOverlay');
+const executeModalTitle = document.getElementById('executeModalTitle');
+const executeModalContent = document.getElementById('executeModalContent');
+const executeModalClose = document.getElementById('executeModalClose');
+
+let inputMode = 'form';
+
+function openExecuteModal(formWrap, toolName) {
+  executeModalContent.innerHTML = '';
+  executeModalContent.appendChild(formWrap);
+  executeModalTitle.textContent = toolName;
+  executeModalOverlay.classList.add('visible');
+  executeModalOverlay.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+}
+function closeExecuteModal() {
+  executeModalOverlay.classList.remove('visible');
+  executeModalOverlay.setAttribute('aria-hidden', 'true');
+  document.body.style.overflow = '';
+}
+executeModalClose?.addEventListener('click', closeExecuteModal);
+executeModalOverlay?.addEventListener('click', (e) => {
+  if (e.target === executeModalOverlay) closeExecuteModal();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && executeModalOverlay?.classList.contains('visible')) closeExecuteModal();
+});
+
+/** Resize a textarea vertically to fit its content (min 2.5em; max-height from CSS). */
+function fitTextareaToContent(ta) {
+  ta.style.height = 'auto';
+  ta.style.height = Math.max(40, ta.scrollHeight) + 'px';
+}
+
+modeSwitcher.addEventListener('click', (e) => {
+  const btn = e.target.closest('.mode-btn');
+  if (!btn || btn.dataset.mode === inputMode) return;
+
+  if (inputMode === 'form') {
+    inputArgsText.value = JSON.stringify(collectFormData(), '', ' ');
+  }
+
+  inputMode = btn.dataset.mode;
+  modeSwitcher.querySelectorAll('.mode-btn').forEach((b) => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  if (inputMode === 'form') {
+    inputArgsText.hidden = true;
+    formFields.hidden = false;
+    populateFormFromJson();
+  } else {
+    inputArgsText.hidden = false;
+    formFields.hidden = true;
+  }
+});
+
+/** Parse inputSchema from string or object; empty/missing/invalid -> {}. */
+function parseInputSchema(value) {
+  if (value === undefined || value === null) return {};
+  if (typeof value === 'object') return value;
+  const s = String(value).trim();
+  if (s === '') return {};
+  try {
+    return JSON.parse(s);
+  } catch {
+    return {};
+  }
+}
+
+function getSelectedSchema() {
+  if (!toolNames.selectedOptions[0]) return {};
+  const raw = toolNames.selectedOptions[0].dataset.inputSchema;
+  return normalizeInputSchema(parseInputSchema(raw));
+}
+
+/** Normalize API schema to JSON Schema shape with .properties (some APIs use .parameters). */
+function normalizeInputSchema(schema) {
+  if (!schema || typeof schema !== 'object') return { type: 'object', properties: {} };
+  if (schema.properties && typeof schema.properties === 'object') {
+    return { type: 'object', properties: schema.properties, required: schema.required };
+  }
+  if (schema.parameters && typeof schema.parameters === 'object' && !Array.isArray(schema.parameters)) {
+    return { type: 'object', properties: schema.parameters, required: schema.required };
+  }
+  return { type: 'object', properties: {}, ...schema };
+}
+
+function buildFormFromSchema(schema, targetEl) {
+  const container = targetEl ?? formFields;
+  container.innerHTML = '';
+  const normalized = normalizeInputSchema(schema);
+  const propKeys = normalized.properties ? Object.keys(normalized.properties) : [];
+  if (!normalized.properties || Object.keys(normalized.properties).length === 0) {
+    const hint = document.createElement('div');
+    hint.className = 'form-hint';
+    hint.textContent = 'This tool has no input parameters.';
+    container.appendChild(hint);
+    return;
+  }
+
+  const required = normalized.required || [];
+
+  for (const [name, prop] of Object.entries(normalized.properties)) {
+    const group = document.createElement('div');
+    group.className = 'schema-field';
+
+    const label = document.createElement('label');
+    label.textContent = name;
+    if (required.includes(name)) {
+      const star = document.createElement('span');
+      star.className = 'required-star';
+      star.textContent = ' *';
+      label.appendChild(star);
+    }
+    group.appendChild(label);
+
+    if (prop.description) {
+      const desc = document.createElement('div');
+      desc.className = 'field-description';
+      desc.textContent = prop.description;
+      group.appendChild(desc);
+    }
+
+    const input = createInputForProperty(name, prop);
+    group.appendChild(input);
+    container.appendChild(group);
+  }
+}
+
+function createInputForProperty(name, prop) {
+  if (prop.enum && prop.enum.length > 0) {
+    const select = document.createElement('select');
+    select.dataset.fieldName = name;
+    select.dataset.fieldType = 'enum';
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Select\u2026';
+    select.appendChild(placeholder);
+    for (const val of prop.enum) {
+      const opt = document.createElement('option');
+      opt.value = val;
+      opt.textContent = val;
+      select.appendChild(opt);
+    }
+    return select;
+  }
+
+  if (prop.type === 'boolean') {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'checkbox-wrapper';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.dataset.fieldName = name;
+    cb.dataset.fieldType = 'boolean';
+    wrapper.appendChild(cb);
+    const lbl = document.createElement('span');
+    lbl.textContent = 'true';
+    lbl.className = 'checkbox-label';
+    wrapper.appendChild(lbl);
+    return wrapper;
+  }
+
+  if (prop.type === 'number' || prop.type === 'integer') {
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.dataset.fieldName = name;
+    input.dataset.fieldType = prop.type;
+    if (prop.minimum !== undefined) input.min = prop.minimum;
+    if (prop.maximum !== undefined) input.max = prop.maximum;
+    if (prop.type === 'integer') input.step = '1';
+    input.placeholder = prop.description || name;
+    return input;
+  }
+
+  if (prop.type === 'object' || prop.type === 'array') {
+    const textarea = document.createElement('textarea');
+    textarea.dataset.fieldName = name;
+    textarea.dataset.fieldType = prop.type;
+    textarea.placeholder = prop.type === 'array' ? '[]' : '{}';
+    textarea.rows = 3;
+    return textarea;
+  }
+
+  const input = document.createElement('input');
+  input.type = getHtmlInputType(prop);
+  input.dataset.fieldName = name;
+  input.dataset.fieldType = 'string';
+  input.placeholder = prop.description || name;
+  return input;
+}
+
+function getHtmlInputType(prop) {
+  if (prop.format === 'date') return 'date';
+  if (prop.format === 'email') return 'email';
+  if (prop.format === 'tel') return 'tel';
+  if (prop.format === '^#[0-9a-zA-Z]{6}$') return 'color';
+  return 'text';
+}
+
+function collectFormData(container) {
+  const root = container ?? formFields;
+  const data = {};
+  root.querySelectorAll('[data-field-name]').forEach((el) => {
+    const name = el.dataset.fieldName;
+    const type = el.dataset.fieldType;
+
+    if (type === 'boolean') {
+      data[name] = el.checked;
+      return;
+    }
+    if (type === 'number' || type === 'integer') {
+      if (el.value !== '') data[name] = type === 'integer' ? parseInt(el.value) : parseFloat(el.value);
+      return;
+    }
+    if (type === 'object' || type === 'array') {
+      if (el.value.trim()) {
+        try {
+          data[name] = JSON.parse(el.value);
+        } catch {
+          data[name] = el.value;
+        }
+      }
+      return;
+    }
+    if (el.value !== '') data[name] = el.value;
+  });
+  return data;
+}
+
+function populateFormFromJson(jsonValueOrElement, formContainer) {
+  const jsonStr =
+    jsonValueOrElement === undefined
+      ? inputArgsText.value
+      : typeof jsonValueOrElement === 'string'
+        ? jsonValueOrElement
+        : (jsonValueOrElement?.value ?? '{}');
+  const root = formContainer ?? formFields;
+  try {
+    const values = JSON.parse(jsonStr || '{}');
+    root.querySelectorAll('[data-field-name]').forEach((el) => {
+      const name = el.dataset.fieldName;
+      if (!(name in values)) return;
+      const val = values[name];
+
+      if (el.dataset.fieldType === 'boolean') {
+        el.checked = !!val;
+      } else if (el.dataset.fieldType === 'object' || el.dataset.fieldType === 'array') {
+        el.value = typeof val === 'object' ? JSON.stringify(val, '', ' ') : val;
+      } else {
+        el.value = val ?? '';
+      }
+    });
+  } catch {}
+}
+
+function getInputArgs() {
+  if (inputMode === 'form') return JSON.stringify(collectFormData());
+  return inputArgsText.value;
+}
 
 // Inject content script first.
 (async () => {
@@ -52,11 +313,27 @@ chrome.runtime.onMessage.addListener(async ({ message, tools, url }, sender) => 
   statusDiv.textContent = message;
   statusDiv.hidden = !message;
 
+  if (!tools) return;
+
   const haveNewTools = JSON.stringify(currentTools) !== JSON.stringify(tools);
 
-  currentTools = tools;
+  currentTools = tools.map((tool) => ({
+    ...tool,
+    inputSchema:
+      typeof tool.inputSchema === 'object' && tool.inputSchema !== null
+        ? JSON.stringify(tool.inputSchema)
+        : tool.inputSchema,
+  }));
+  if (currentTools.length > 0) {
+    const first = currentTools[0];
+    const parsed = parseInputSchema(first.inputSchema);
+    const hasAnySchema = (currentTools.some((t) => (parseInputSchema(t.inputSchema).properties || {}) && Object.keys(parseInputSchema(t.inputSchema).properties || {}).length > 0));
+    if (!hasAnySchema && currentTools.length > 0) {
+      console.log('[schema] All tools have empty inputSchema. To see parameters, expose schemas from the page (e.g. window.__MCP_TOOL_SCHEMAS__) or ensure the tool source provides inputSchema.');
+    }
+  }
 
-  if (!tools || tools.length === 0) {
+  if (currentTools.length === 0) {
     const row = document.createElement('tr');
     row.innerHTML = `<td colspan="100%"><i>No tools registered yet in ${url || tab.url}</i></td>`;
     tbody.appendChild(row);
@@ -73,15 +350,21 @@ chrome.runtime.onMessage.addListener(async ({ message, tools, url }, sender) => 
   executeBtn.disabled = false;
   copyToClipboard.hidden = false;
 
-  const keys = Object.keys(tools[0]);
+  const keys = Object.keys(currentTools[0]);
   keys.forEach((key) => {
     const th = document.createElement('th');
     th.textContent = key;
     thead.appendChild(th);
   });
+  const thExecute = document.createElement('th');
+  thExecute.textContent = 'Execute';
+  thead.appendChild(thExecute);
 
-  tools.forEach((item) => {
+  const numCols = keys.length + 1;
+
+  currentTools.forEach((item) => {
     const row = document.createElement('tr');
+    row.className = 'tool-row';
     keys.forEach((key) => {
       const td = document.createElement('td');
       try {
@@ -91,8 +374,108 @@ chrome.runtime.onMessage.addListener(async ({ message, tools, url }, sender) => 
       }
       row.appendChild(td);
     });
+    const tdBtn = document.createElement('td');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'row-execute-btn';
+    btn.textContent = '▶';
+    btn.title = 'Open execute form';
+    tdBtn.appendChild(btn);
+    row.appendChild(tdBtn);
     tbody.appendChild(row);
 
+    const rawSchema = parseInputSchema(item.inputSchema);
+    const schema = normalizeInputSchema(rawSchema);
+    const hasInputParams = schema.properties && Object.keys(schema.properties).length > 0;
+
+    const formWrap = document.createElement('div');
+    formWrap.className = 'row-execute-form';
+    formWrap.dataset.toolName = item.name;
+
+    const modeWrap = document.createElement('div');
+    modeWrap.className = 'input-args-header';
+    if (hasInputParams) {
+      const modeSwitcherRow = document.createElement('div');
+      modeSwitcherRow.className = 'mode-switcher row-mode-switcher';
+      modeSwitcherRow.innerHTML = '<button type="button" class="mode-btn active" data-mode="form">Form</button><button type="button" class="mode-btn" data-mode="json">JSON</button>';
+      modeWrap.appendChild(modeSwitcherRow);
+    } else {
+      modeWrap.hidden = true;
+    }
+    formWrap.appendChild(modeWrap);
+
+    const rowFormFields = document.createElement('div');
+    rowFormFields.className = 'row-form-fields';
+    formWrap.appendChild(rowFormFields);
+
+    const rowInputArgs = document.createElement('textarea');
+    rowInputArgs.className = 'row-input-args';
+    rowInputArgs.hidden = true;
+    rowInputArgs.placeholder = '{}';
+    formWrap.appendChild(rowInputArgs);
+
+    const template = generateTemplateFromSchema(schema) ?? {};
+    rowInputArgs.value = JSON.stringify(template, '', ' ');
+    buildFormFromSchema(schema, rowFormFields);
+    populateFormFromJson(rowInputArgs.value, rowFormFields);
+
+    rowInputArgs.addEventListener('input', () => fitTextareaToContent(rowInputArgs));
+
+    const submitWrap = document.createElement('div');
+    submitWrap.className = 'form-group';
+    const submitBtn = document.createElement('button');
+    submitBtn.type = 'button';
+    submitBtn.className = 'row-execute-submit';
+    submitBtn.textContent = 'Execute';
+    submitWrap.appendChild(submitBtn);
+    formWrap.appendChild(submitWrap);
+
+    const resultPre = document.createElement('pre');
+    resultPre.className = 'row-execute-result';
+    formWrap.appendChild(resultPre);
+
+    let rowInputMode = 'form';
+    const modeSwitcherRow = modeWrap.querySelector('.row-mode-switcher');
+    if (modeSwitcherRow) {
+      modeSwitcherRow.querySelectorAll('.mode-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          if (btn.dataset.mode === rowInputMode) return;
+          if (rowInputMode === 'form') rowInputArgs.value = JSON.stringify(collectFormData(rowFormFields), '', ' ');
+          rowInputMode = btn.dataset.mode;
+          modeSwitcherRow.querySelectorAll('.mode-btn').forEach((b) => b.classList.remove('active'));
+          btn.classList.add('active');
+          if (rowInputMode === 'form') {
+            rowInputArgs.hidden = true;
+            rowFormFields.hidden = false;
+            populateFormFromJson(rowInputArgs.value, rowFormFields);
+          } else {
+            rowInputArgs.hidden = false;
+            rowFormFields.hidden = true;
+            requestAnimationFrame(() => fitTextareaToContent(rowInputArgs));
+          }
+        });
+      });
+    }
+
+    btn.addEventListener('click', () => {
+      openExecuteModal(formWrap, item.name);
+    });
+
+    submitBtn.addEventListener('click', async () => {
+      resultPre.textContent = '';
+      const inputArgs = rowInputMode === 'form' ? JSON.stringify(collectFormData(rowFormFields)) : rowInputArgs.value;
+      const toolName = formWrap.dataset.toolName;
+      try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        const result = await chrome.tabs.sendMessage(tab.id, { action: 'EXECUTE_TOOL', name: toolName, inputArgs });
+        resultPre.textContent = result != null ? String(result) : '';
+      } catch (e) {
+        resultPre.textContent = `Error: ${e.message}`;
+      }
+    });
+  });
+
+  currentTools.forEach((item) => {
     const option = document.createElement('option');
     option.textContent = `"${item.name}"`;
     option.value = item.name;
@@ -139,14 +522,13 @@ copyAsJSON.onclick = async () => {
 
 let genAI, chat;
 
-const envModulePromise = import('./.env.json', { with: { type: 'json' } });
-
 async function initGenAI() {
   let env;
   try {
-    // Try load .env.json if present.
-    env = (await envModulePromise).default;
-  } catch {}
+    env = (await import('./.env.json', { with: { type: 'json' } })).default;
+  } catch {
+    // .env.json is optional (e.g. not committed); ignore
+  }
   if (env?.apiKey) localStorage.apiKey ??= env.apiKey;
   localStorage.model ??= env?.model || 'gemini-2.5-flash';
   genAI = localStorage.apiKey ? new GoogleGenAI({ apiKey: localStorage.apiKey }) : undefined;
@@ -287,7 +669,7 @@ executeBtn.onclick = async () => {
   toolResults.textContent = '';
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const name = toolNames.selectedOptions[0].value;
-  const inputArgs = inputArgsText.value;
+  const inputArgs = getInputArgs();
   const result = await chrome.tabs.sendMessage(tab.id, { action: 'EXECUTE_TOOL', name, inputArgs });
   if (result !== null) {
     toolResults.textContent = result;
@@ -304,9 +686,11 @@ executeBtn.onclick = async () => {
 toolNames.onchange = updateDefaultValueForInputArgs;
 
 function updateDefaultValueForInputArgs() {
-  const inputSchema = toolNames.selectedOptions[0].dataset.inputSchema || '{}';
-  const template = generateTemplateFromSchema(JSON.parse(inputSchema));
+  const schema = getSelectedSchema();
+  const template = generateTemplateFromSchema(schema);
   inputArgsText.value = JSON.stringify(template, '', ' ');
+  buildFormFromSchema(schema);
+  populateFormFromJson();
 }
 
 // Utils
