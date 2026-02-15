@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pizza Palace - WebMCP Tool Input Types Demo</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #fdf6ec;
+            min-height: 100vh;
+            color: #2d2d2d;
+        }
+
+        .hero {
+            background: linear-gradient(135deg, #d32f2f 0%, #ff6f00 100%);
+            color: white;
+            text-align: center;
+            padding: 2.5rem 1rem 2rem;
+        }
+
+        .hero h1 { font-size: 2.4rem; margin-bottom: 0.4rem; letter-spacing: -0.5px; }
+        .hero p  { opacity: 0.92; font-size: 1.05rem; max-width: 640px; margin: 0 auto; }
+
+        .badge-row {
+            display: flex; gap: 8px; justify-content: center; margin-top: 1rem; flex-wrap: wrap;
+        }
+        .badge {
+            font-size: 0.72rem; padding: 3px 10px; border-radius: 20px;
+            background: rgba(255,255,255,0.22); color: #fff; font-weight: 600;
+        }
+
+        .container { max-width: 960px; margin: 0 auto; padding: 2rem 1rem 4rem; }
+
+        /* ---------- API Status ---------- */
+        .api-bar {
+            display: flex; gap: 12px; flex-wrap: wrap;
+            background: #fff; border-radius: 10px; padding: 14px 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06); margin-bottom: 2rem;
+            align-items: center;
+        }
+        .api-dot {
+            width: 12px; height: 12px; border-radius: 50%;
+            display: inline-block; vertical-align: middle; margin-right: 4px;
+        }
+        .api-dot.ok   { background: #43a047; }
+        .api-dot.fail { background: #e53935; }
+
+        /* ---------- Tool Card ---------- */
+        .tool-card {
+            background: #fff;
+            border-radius: 14px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+            margin-bottom: 2rem;
+            overflow: hidden;
+        }
+        .tool-card-header {
+            background: linear-gradient(90deg, #d32f2f, #e65100);
+            color: #fff;
+            padding: 1rem 1.5rem;
+            display: flex; align-items: center; gap: 10px;
+        }
+        .tool-card-header h2 { font-size: 1.2rem; font-weight: 700; }
+        .tool-card-header small { opacity: 0.85; font-size: 0.82rem; }
+        .tool-card-body { padding: 1.5rem; }
+
+        /* ---------- Form styles ---------- */
+        form[toolname] {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 18px;
+        }
+        @media (max-width: 600px) {
+            form[toolname] { grid-template-columns: 1fr; }
+        }
+        /* ── Agent-active: browser pseudo-class (declarative path) ── */
+        form[toolname]:tool-form-active,
+        form[toolname].tool-form-active {
+            background: #fff8e1;
+            border: 2px solid #ffc107;
+            border-radius: 12px;
+            padding: 1.4rem;
+            box-shadow: 0 0 0 4px rgba(255,193,7,0.18);
+            transition: background .3s, box-shadow .3s;
+        }
+        form[toolname]:tool-form-active input,
+        form[toolname]:tool-form-active select,
+        form[toolname]:tool-form-active textarea,
+        form[toolname].tool-form-active input,
+        form[toolname].tool-form-active select,
+        form[toolname].tool-form-active textarea {
+            background: #fffde7;
+            border-color: #ffc107;
+        }
+
+        /* Submit button glow while agent is active */
+        form[toolname]:tool-form-active button[type="submit"],
+        form[toolname].tool-form-active button[type="submit"],
+        button[type="submit"]:tool-submit-active,
+        button[type="submit"].tool-submit-active {
+            background: #ff8f00 !important;
+            color: #fff;
+            animation: agent-pulse 1.2s ease-in-out infinite;
+        }
+
+        @keyframes agent-pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(255,143,0,0.5); }
+            50%      { box-shadow: 0 0 0 8px rgba(255,143,0,0); }
+        }
+
+        /* Agent banner injected by JS */
+        .agent-banner {
+            grid-column: 1 / -1;
+            background: linear-gradient(90deg, #fff8e1, #fff3e0);
+            border: 1px solid #ffc107;
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: #e65100;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            animation: agent-slide-in .3s ease-out;
+        }
+        @keyframes agent-slide-in {
+            from { opacity: 0; transform: translateY(-6px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .field { display: flex; flex-direction: column; gap: 5px; }
+        .field.full { grid-column: 1 / -1; }
+        .field label {
+            font-size: 0.82rem; font-weight: 600; color: #555;
+            display: flex; align-items: center; gap: 4px;
+        }
+        .field label .type-tag {
+            font-size: 0.65rem; background: #e8eaf6; color: #3949ab;
+            padding: 1px 6px; border-radius: 4px; font-weight: 700;
+        }
+        .field input, .field select, .field textarea {
+            padding: 9px 12px; border: 1px solid #ddd; border-radius: 8px;
+            font-size: 0.92rem; font-family: inherit; color: #333; background: #fff;
+            transition: border-color .2s, box-shadow .2s;
+        }
+        .field input:focus, .field select:focus, .field textarea:focus {
+            outline: none; border-color: #d32f2f;
+            box-shadow: 0 0 0 3px rgba(211,47,47,0.12);
+        }
+        .field textarea { resize: vertical; min-height: 70px; }
+        .field input[type="color"] { height: 40px; padding: 4px; cursor: pointer; }
+        .field input[type="checkbox"] { width: 18px; height: 18px; accent-color: #d32f2f; }
+        .field .checkbox-row { display: flex; align-items: center; gap: 8px; }
+
+        .submit-row {
+            grid-column: 1 / -1;
+            display: flex; gap: 10px; margin-top: 6px;
+        }
+        .submit-row button {
+            padding: 10px 24px; border: none; border-radius: 8px;
+            font-size: 0.95rem; font-weight: 600; cursor: pointer;
+            transition: background .2s, transform .1s;
+        }
+        .submit-row button[type="submit"] {
+            background: #d32f2f; color: #fff;
+        }
+        .submit-row button[type="submit"]:hover { background: #b71c1c; }
+        .submit-row button[type="reset"] {
+            background: #eee; color: #555;
+        }
+        .submit-row button:active { transform: scale(0.97); }
+
+        /* ---------- Log ---------- */
+        .log-section { margin-top: 1rem; }
+        .log-section h3 { font-size: 1rem; margin-bottom: 8px; color: #555; }
+        .log-box {
+            background: #1e1e1e; color: #ccc; padding: 1rem; border-radius: 10px;
+            max-height: 320px; overflow-y: auto; font-family: 'Fira Code', 'Courier New', monospace;
+            font-size: 0.82rem; line-height: 1.7;
+        }
+        .log-box .ok  { color: #66bb6a; }
+        .log-box .err { color: #ef5350; }
+        .log-box .wrn { color: #fdd835; }
+        .log-box .inf { color: #90caf9; }
+        .log-box .dim { color: #777; }
+
+        .legend {
+            background: #fff; border-radius: 10px; padding: 1.2rem 1.5rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06); margin-bottom: 2rem;
+        }
+        .legend h3 { font-size: 1rem; margin-bottom: 8px; color: #d32f2f; }
+        .legend-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 6px 18px; font-size: 0.82rem; color: #555;
+        }
+        .legend-grid code {
+            background: #e8eaf6; color: #3949ab; padding: 1px 5px;
+            border-radius: 3px; font-size: 0.78rem;
+        }
+    </style>
+</head>
+<body>
+
+<!-- ====== Hero ====== -->
+<div class="hero">
+    <h1>Pizza Palace</h1>
+    <p>A comprehensive demo of every WebMCP tool input type &mdash; themed as a pizza ordering system.</p>
+
+</div>
+
+<div class="container">
+
+    <!-- API Status -->
+    <div class="api-bar">
+        <span><span class="api-dot" id="mc-dot"></span> <strong>modelContext</strong> <span id="mc-label">...</span></span>
+        <span><span class="api-dot" id="mct-dot"></span> <strong>modelContextTesting</strong> <span id="mct-label">...</span></span>
+        <span style="margin-left:auto; font-size:0.82rem; color:#999;" id="tool-count"></span>
+    </div>
+
+    <!-- Type legend -->
+    <div class="legend">
+        <h3>Input Types Demonstrated</h3>
+        <div class="legend-grid">
+            <span><code>string</code> &mdash; plain text</span>
+            <span><code>string+enum</code> &mdash; dropdown</span>
+            <span><code>string+email</code> &mdash; email input</span>
+            <span><code>string+tel</code> &mdash; phone input</span>
+            <span><code>string+date</code> &mdash; date picker</span>
+            <span><code>string+time</code> &mdash; time picker</span>
+            <span><code>string+datetime</code> &mdash; datetime picker</span>
+            <span><code>string+month</code> &mdash; month picker</span>
+            <span><code>string+week</code> &mdash; week picker</span>
+            <span><code>string+color</code> &mdash; color picker</span>
+            <span><code>number</code> &mdash; decimal number</span>
+            <span><code>integer</code> &mdash; whole number</span>
+            <span><code>boolean</code> &mdash; checkbox</span>
+            <span><code>array&lt;string&gt;</code> &mdash; dynamic list</span>
+            <span><code>array&lt;enum&gt;</code> &mdash; list of selects</span>
+            <span><code>array&lt;number&gt;</code> &mdash; list of numbers</span>
+            <span><code>array&lt;object&gt;</code> &mdash; JSON textarea</span>
+            <span><code>object</code> &mdash; JSON textarea</span>
+            <span><code>const</code> &mdash; locked value</span>
+            <span><code>null</code> &mdash; null placeholder</span>
+            <span><code>oneOf</code> &mdash; variant selector</span>
+        </div>
+    </div>
+
+    <!-- ================================================================ -->
+    <!--  TOOL 1 — order_pizza (main order, lots of basic types)          -->
+    <!-- ================================================================ -->
+    <div class="tool-card">
+        <div class="tool-card-header">
+            <h2>Tool 1 &mdash; order_pizza</h2>
+            <small>string &bull; enum &bull; email &bull; tel &bull; date &bull; time &bull; integer &bull; number &bull; boolean &bull; array&lt;enum&gt; &bull; object</small>
+        </div>
+        <div class="tool-card-body">
+            <form toolname="order_pizza"
+                  tooldescription="Place a pizza order with customer details, pizza configuration, and delivery info"
+                  id="order-pizza-form">
+
+                <!-- string -->
+                <div class="field">
+                    <label>Customer Name <span class="type-tag">string</span></label>
+                    <input type="text" name="customerName" placeholder="e.g., Mario Rossi" required>
+                </div>
+
+                <!-- string format: email -->
+                <div class="field">
+                    <label>Email <span class="type-tag">string · email</span></label>
+                    <input type="email" name="email" placeholder="mario@example.com" required>
+                </div>
+
+                <!-- string format: tel -->
+                <div class="field">
+                    <label>Phone <span class="type-tag">string · tel</span></label>
+                    <input type="tel" name="phone" placeholder="555-123-4567">
+                </div>
+
+                <!-- string enum -->
+                <div class="field">
+                    <label>Size <span class="type-tag">string · enum</span></label>
+                    <select name="size" required>
+                        <option value="">Select&hellip;</option>
+                        <option value="personal">Personal (8")</option>
+                        <option value="small">Small (10")</option>
+                        <option value="medium" selected>Medium (12")</option>
+                        <option value="large">Large (14")</option>
+                        <option value="extra-large">Extra Large (16")</option>
+                    </select>
+                </div>
+
+                <!-- string enum -->
+                <div class="field">
+                    <label>Crust <span class="type-tag">string · enum</span></label>
+                    <select name="crustType" required>
+                        <option value="">Select&hellip;</option>
+                        <option value="thin">Thin Crust</option>
+                        <option value="regular" selected>Regular</option>
+                        <option value="thick">Thick / Pan</option>
+                        <option value="stuffed">Stuffed Crust</option>
+                        <option value="gluten-free">Gluten-Free</option>
+                    </select>
+                </div>
+
+                <!-- string enum -->
+                <div class="field">
+                    <label>Sauce <span class="type-tag">string · enum</span></label>
+                    <select name="sauce">
+                        <option value="tomato" selected>Classic Tomato</option>
+                        <option value="marinara">Marinara</option>
+                        <option value="pesto">Pesto</option>
+                        <option value="white">White / Alfredo</option>
+                        <option value="bbq">BBQ</option>
+                        <option value="none">No Sauce</option>
+                    </select>
+                </div>
+
+                <!-- integer -->
+                <div class="field">
+                    <label>Quantity <span class="type-tag">integer</span></label>
+                    <input type="number" name="quantity" value="1" min="1" max="20" step="1" required>
+                </div>
+
+                <!-- number -->
+                <div class="field">
+                    <label>Tip Amount ($) <span class="type-tag">number</span></label>
+                    <input type="number" name="tipAmount" value="0" min="0" step="0.50" placeholder="0.00">
+                </div>
+
+                <!-- boolean -->
+                <div class="field">
+                    <label>Extra Cheese <span class="type-tag">boolean</span></label>
+                    <div class="checkbox-row">
+                        <input type="checkbox" name="extraCheese" id="extraCheese">
+                        <label for="extraCheese" style="font-weight:normal; font-size:0.9rem; color:#333;">Yes, add extra mozzarella (+$1.50)</label>
+                    </div>
+                </div>
+
+                <!-- boolean -->
+                <div class="field">
+                    <label>Contactless Delivery <span class="type-tag">boolean</span></label>
+                    <div class="checkbox-row">
+                        <input type="checkbox" name="contactlessDelivery" id="contactless" checked>
+                        <label for="contactless" style="font-weight:normal; font-size:0.9rem; color:#333;">Leave at the door</label>
+                    </div>
+                </div>
+
+                <!-- string format: date -->
+                <div class="field">
+                    <label>Delivery Date <span class="type-tag">string · date</span></label>
+                    <input type="date" name="deliveryDate" required>
+                </div>
+
+                <!-- string format: time (HH:mm) -->
+                <div class="field">
+                    <label>Delivery Time <span class="type-tag">string · time</span></label>
+                    <input type="time" name="deliveryTime" value="18:30" required>
+                </div>
+
+                <!-- object (JSON textarea) -->
+                <div class="field full">
+                    <label>Delivery Address <span class="type-tag">object</span></label>
+                    <textarea name="deliveryAddress" rows="3" placeholder='{"street": "123 Main St", "city": "Rome", "zip": "00100"}'></textarea>
+                </div>
+
+                <!-- string (free text) -->
+                <div class="field full">
+                    <label>Special Instructions <span class="type-tag">string</span></label>
+                    <input type="text" name="specialInstructions" placeholder="e.g., Ring the bell twice, extra napkins">
+                </div>
+
+                <div class="submit-row">
+                    <button type="submit">Place Order</button>
+                    <button type="reset">Clear</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ================================================================ -->
+    <!--  TOOL 2 — customize_pizza (advanced: const, null, oneOf, color,  -->
+    <!--           array<enum>, array<number>, array<string>)             -->
+    <!-- ================================================================ -->
+    <div class="tool-card">
+        <div class="tool-card-header">
+            <h2>Tool 2 &mdash; customize_pizza</h2>
+            <small>const &bull; null &bull; oneOf &bull; color &bull; array&lt;enum&gt; &bull; array&lt;number&gt; &bull; array&lt;string&gt;</small>
+        </div>
+        <div class="tool-card-body">
+            <form toolname="customize_pizza"
+                  tooldescription="Customize pizza with toppings, sauce color, spice levels, and baking preferences"
+                  id="customize-pizza-form">
+
+                <!-- const -->
+                <div class="field">
+                    <label>Store ID <span class="type-tag">const</span></label>
+                    <input type="text" name="storeId" value="PIZZA-PALACE-001" readonly disabled
+                           style="background:#f5f5f5; color:#999;">
+                </div>
+
+                <!-- null -->
+                <div class="field">
+                    <label>Coupon Code <span class="type-tag">null</span></label>
+                    <input type="text" name="couponCode" value="null" readonly disabled
+                           style="background:#f5f5f5; color:#bbb; font-style:italic;">
+                </div>
+
+                <!-- string format: color -->
+                <div class="field">
+                    <label>Sauce Tint <span class="type-tag">string · color</span></label>
+                    <input type="color" name="sauceColor" value="#d32f2f">
+                </div>
+
+                <!-- integer with min/max -->
+                <div class="field">
+                    <label>Baking Temp (&deg;F) <span class="type-tag">integer · min/max</span></label>
+                    <input type="number" name="bakingTemperature" value="425" min="300" max="550" step="1">
+                </div>
+
+                <!-- number with min/max -->
+                <div class="field">
+                    <label>Spice Level (0-10) <span class="type-tag">number · min/max</span></label>
+                    <input type="number" name="spiceLevel" value="3" min="0" max="10" step="0.5">
+                </div>
+
+                <!-- enum (another example) -->
+                <div class="field">
+                    <label>Cheese Blend <span class="type-tag">string · enum</span></label>
+                    <select name="cheeseBlend">
+                        <option value="mozzarella" selected>Mozzarella</option>
+                        <option value="four-cheese">Four Cheese</option>
+                        <option value="vegan">Vegan Cheese</option>
+                        <option value="none">No Cheese</option>
+                    </select>
+                </div>
+
+                <!-- This is just HTML - the real schema types come from __MCP_TOOL_SCHEMAS__ below -->
+                <!-- Representing array<string> as a textarea hint -->
+                <div class="field full">
+                    <label>Custom Toppings <span class="type-tag">array&lt;string&gt;</span></label>
+                    <textarea name="customToppings" rows="2" placeholder='Write toppings separated by comma, or the inspector will show a dynamic list'></textarea>
+                </div>
+
+                <!-- Representing array<enum> toppings -->
+                <div class="field full">
+                    <label>Premium Toppings <span class="type-tag">array&lt;enum&gt;</span></label>
+                    <textarea name="premiumToppings" rows="2" placeholder='The inspector will show a dynamic list of selects from the schema'></textarea>
+                </div>
+
+                <!-- Representing array<number> for spice per slice -->
+                <div class="field full">
+                    <label>Spice Per Slice <span class="type-tag">array&lt;number&gt;</span></label>
+                    <textarea name="spicePerSlice" rows="2" placeholder='The inspector will show a dynamic list of number inputs'></textarea>
+                </div>
+
+                <div class="submit-row">
+                    <button type="submit">Apply Customization</button>
+                    <button type="reset">Reset</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ================================================================ -->
+    <!--  TOOL 3 — schedule_delivery (datetime-local, month, week,        -->
+    <!--           array<object>, oneOf, examples, default)               -->
+    <!-- ================================================================ -->
+    <div class="tool-card">
+        <div class="tool-card-header">
+            <h2>Tool 3 &mdash; schedule_delivery</h2>
+            <small>datetime-local &bull; month &bull; week &bull; array&lt;object&gt; &bull; oneOf &bull; examples &bull; default</small>
+        </div>
+        <div class="tool-card-body">
+            <form toolname="schedule_delivery"
+                  tooldescription="Schedule a pizza delivery with precise timing, recurring orders, and routing options"
+                  id="schedule-delivery-form">
+
+                <!-- string format: datetime-local -->
+                <div class="field">
+                    <label>Pickup Date &amp; Time <span class="type-tag">string · datetime-local</span></label>
+                    <input type="datetime-local" name="pickupDateTime">
+                </div>
+
+                <!-- string format: month -->
+                <div class="field">
+                    <label>Subscription Month <span class="type-tag">string · month</span></label>
+                    <input type="month" name="subscriptionMonth">
+                </div>
+
+                <!-- string format: week -->
+                <div class="field">
+                    <label>Delivery Week <span class="type-tag">string · week</span></label>
+                    <input type="week" name="deliveryWeek">
+                </div>
+
+                <!-- integer -->
+                <div class="field">
+                    <label>Max Delivery Minutes <span class="type-tag">integer · default</span></label>
+                    <input type="number" name="maxDeliveryMinutes" value="45" min="10" max="120" step="1">
+                </div>
+
+                <!-- string with examples -->
+                <div class="field">
+                    <label>Driver Notes <span class="type-tag">string · examples</span></label>
+                    <input type="text" name="driverNotes" placeholder="e.g., Use the side entrance">
+                </div>
+
+                <!-- boolean -->
+                <div class="field">
+                    <label>Priority Delivery <span class="type-tag">boolean · default</span></label>
+                    <div class="checkbox-row">
+                        <input type="checkbox" name="priorityDelivery" id="priority">
+                        <label for="priority" style="font-weight:normal; font-size:0.9rem; color:#333;">Express (+$3.99)</label>
+                    </div>
+                </div>
+
+                <!-- object - route preferences -->
+                <div class="field full">
+                    <label>Route Preferences <span class="type-tag">object</span></label>
+                    <textarea name="routePreferences" rows="3" placeholder='{"avoidHighways": true, "preferredRoute": "scenic"}'></textarea>
+                </div>
+
+                <!-- array<object> - waypoints -->
+                <div class="field full">
+                    <label>Delivery Waypoints <span class="type-tag">array&lt;object&gt;</span></label>
+                    <textarea name="waypoints" rows="3" placeholder='[{"lat": 41.9028, "lng": 12.4964, "label": "Colosseum"}]'></textarea>
+                </div>
+
+                <div class="submit-row">
+                    <button type="submit">Schedule Delivery</button>
+                    <button type="reset">Clear</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ================================================================ -->
+    <!--  Log                                                              -->
+    <!-- ================================================================ -->
+    <div class="log-section">
+        <h3>Activity Log
+            <button id="clear-log-btn" style="font-size:0.75rem; padding:3px 10px; border:1px solid #ddd; border-radius:6px; background:#fff; cursor:pointer; margin-left:8px;">Clear</button>
+        </h3>
+        <div class="log-box" id="log"></div>
+    </div>
+</div>
+
+<script src="pizza-order-demo.js"></script>
+</body>
+</html>
